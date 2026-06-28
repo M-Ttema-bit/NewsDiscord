@@ -48,13 +48,13 @@ def call_gemini_with_fallback(prompt):
             time.sleep(2)
     return None
 
-def text_to_speech_voicevox(text, output_filename="radio.wav", speaker=2):
-    """不良品WAVの検閲機能と、詳細なエラー報告機能、読み・速度調整を搭載"""
-    print("🎙️ 音声を生成中...（読み方・速度調整版）")
+def text_to_speech_voicevox(text, output_filename="radio.wav", speaker=20):
+    """【手毬チューニング版】もち子さんを使用し、速度・ピッチ・抑揚を調整"""
+    print("🎙️ 音声を生成中...（月村手毬SSチューニング版）")
     
     clean_text = text.replace("*", "").replace("#", "").replace('"', '').replace("'", "")
     
-    # 📝 読み間違いの強制修正（VOICEVOXに渡す前にカタカナに変換）
+    # 📝 読み間違いの強制修正（カタカナで直接指示）
     clean_text = clean_text.replace("月村手毬", "ツキムラテマリ")
     clean_text = clean_text.replace("初星学園", "ハツボシガクエン")
     
@@ -64,12 +64,15 @@ def text_to_speech_voicevox(text, output_filename="radio.wav", speaker=2):
     
     try:
         for i, line in enumerate(lines):
+            # もち子さん(ID: 20)を指定して設計図をリクエスト
             query_res = requests.post(f"http://127.0.0.1:50021/audio_query", params={"text": line, "speaker": speaker})
             if query_res.status_code != 200: continue
             
-            # ⚙️ VOICEVOXの設計図（パラメータ）を直接書き換える
+            # ⚙️ VOICEVOXの設計図を「SS動画の手毬風」に直接書き換える
             query_data = query_res.json()
-            query_data["speedScale"] = 0.8  # 読み上げ速度を0.8倍に変更
+            query_data["speedScale"] = 0.8       # 速度: 0.8倍（落ち着いたペース）
+            query_data["pitchScale"] = -0.05     # 音高: 少し低く（クール・重い愛情の演出）
+            query_data["intonationScale"] = 0.8  # 抑揚: 少し平坦に（SS特有の淡々とした語り口）
             
             synth_res = requests.post(f"http://127.0.0.1:50021/synthesis", params={"speaker": speaker}, json=query_data)
             if synth_res.status_code == 200:
@@ -87,7 +90,6 @@ def text_to_speech_voicevox(text, output_filename="radio.wav", speaker=2):
                 with wave.open(wf, 'rb') as w:
                     valid_wavs.append(wf)
             except wave.Error:
-                print(f"⚠️ 破損したWAVファイルをスキップしました: {wf}")
                 continue
                 
         if not valid_wavs:
