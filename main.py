@@ -6,7 +6,8 @@ import google.generativeai as genai
 import time
 import json
 import wave
-import subprocess # 👈 NEW: MP3圧縮ツールを呼び出すための部品を追加
+import subprocess
+import traceback # 👈 NEW: エラー詳細を取得する部品
 
 # ==========================================
 # ⚙️ 設定エリア
@@ -48,19 +49,19 @@ def call_gemini_with_fallback(prompt):
     return None
 
 def text_to_speech_voicevox(text, output_filename="radio.wav", speaker=2):
-    """安定化のため一文ずつ分割し、最後にMP3に圧縮して容量制限を突破する"""
-    print("🎙️ 音声を生成中...（安定化のため一文ずつ分割処理します）")
+    """不良品WAVの検閲機能と、詳細なエラー報告機能を搭載"""
+    print("🎙️ 音声を生成中...")
     
-    clean_text = text.replace("*", "").replace("#", "")
+    clean_text = text.replace("*", "").replace("#", "").replace('"', '').replace("'", "")
     clean_text = clean_text.replace("。", "。\n").replace("！", "！\n").replace("？", "？\n")
     lines = [line.strip() for line in clean_text.split('\n') if line.strip()]
     wav_files = []
     
     try:
+        # 1. 一文ずつ生成
         for i, line in enumerate(lines):
             query_res = requests.post(f"http://127.0.0.1:50021/audio_query", params={"text": line, "speaker": speaker})
-            if query_res.status_code != 200:
-                continue
+            if query_res.status_code != 200: continue
             
             synth_res = requests.post(f"http://127.0.0.1:50021/synthesis", params={"speaker": speaker}, json=query_res.json())
             if synth_res.status_code == 200:
@@ -70,28 +71,41 @@ def text_to_speech_voicevox(text, output_filename="radio.wav", speaker=2):
                 wav_files.append(tmp_name)
         
         if not wav_files:
-            print("❌ 音声ファイルの生成に失敗しました。")
-            return None
+            return "ERROR: VOICEVOXから有効な音声が1つも返ってきませんでした。"
 
-        # 1. 数十個のWAVを1つの巨大なWAVに結合
-        with wave.open(wav_files[0], 'rb') as w_in:
+        # 2. 【自動検閲】壊れたWAVファイルを結合前に除外する
+        valid_wavs = []
+        for wf in wav_files:
+            try:
+                with wave.open(wf, 'rb') as w:
+                    valid_wavs.append(wf)
+            except wave.Error:
+                print(f"⚠️ 破損したWAVファイルをスキップしました: {wf}")
+                continue
+                
+        if not valid_wavs:
+            return "ERROR: 生成されたWAVファイルが全て破損していました。"
+
+        # 3. 正常なWAVだけを結合
+        with wave.open(valid_wavs[0], 'rb') as w_in:
             params = w_in.getparams()
             with wave.open(output_filename, 'wb') as w_out:
                 w_out.setparams(params)
-                for wf in wav_files:
+                for wf in valid_wavs:
                     with wave.open(wf, 'rb') as w:
                         w_out.writeframes(w.readframes(w.getnframes()))
         
-        # 2. 巨大なWAVを軽量なMP3に圧縮（Discordの制限回避）
+        # 4. MP3に圧縮
         mp3_filename = "radio.mp3"
-        print("🗜️ WAVからMP3へ圧縮中...（Discordアップロード用）")
+        print("🗜️ WAVからMP3へ圧縮中...")
         subprocess.run(["ffmpeg", "-i", output_filename, "-b:a", "128k", mp3_filename, "-y"], check=True)
         
-        return mp3_filename # 成功時はMP3のファイル名を返す
+        return mp3_filename 
 
     except Exception as e:
-        print(f"⚠️ 音声生成/変換エラー: {e}")
-        return None
+        error_trace = traceback.format_exc()
+        print(f"⚠️ 音声処理エラー:\n{error_trace}")
+        return f"ERROR: 音声処理中にPythonエラーが発生しました。\n{e}"
 
 def send_audio_to_discord(webhook_url, text_msg, filename):
     print(f"📤 Discordへ音声ファイル（{filename}）を送信中...")
@@ -130,8 +144,7 @@ def main():
     """
 
     ai_result_text = call_gemini_with_fallback(prompt)
-    if not ai_result_text:
-        return
+    if not ai_result_text: return
 
     try:
         clean_json_str = ai_result_text.strip().lstrip("```json").rstrip("```").strip()
@@ -155,7 +168,6 @@ def main():
     # ② 音声メッセージ作成と送信
     print("🎙️ ラジオ台本構築中...")
     
-    # 🎤 ここから手毬の原稿 🎤
     audio_msg = "📻 **【読み上げ原稿】ニュースラジオ**\n\nおはようございます。初星学園の、月村手毬です。本日の主要ニュースをお伝えします。ラインナップはこちらの5本です。\n\n"
     for i, link_data in enumerate(original_links):
         audio_msg += f"ニュースその{i+1}。{link_data['title']}。\n"
@@ -168,16 +180,20 @@ def main():
         
     audio_msg += "本日のニュースは以上となります。少しでもあなたの力になれたなら、光栄です。月村手毬がお送りしました。それでは、いってらっしゃいませ。"
 
-    # --- 音声化（一文分割＆MP3圧縮処理） ---
-    final_audio_file = text_to_speech_voicevox(audio_msg, speaker=2)
+    # --- 音声化処理 ---
+    final_audio_result = text_to_speech_voicevox(audio_msg, speaker=2)
 
-    if final_audio_file:
-        send_audio_to_discord(WEBHOOK_AUDIO, "📻 **本日のニュースラジオ、月村手毬です！**", final_audio_file)
+    # 挙動変化：成功時とエラー時でDiscordへの送信内容を明確に分ける
+    if final_audio_result and not final_audio_result.startswith("ERROR:"):
+        send_audio_to_discord(WEBHOOK_AUDIO, "📻 **本日のニュースラジオ、月村手毬です！**", final_audio_result)
         send_to_discord(WEBHOOK_AUDIO, audio_msg) 
     else:
+        # エラーが発生した場合は、Discordに直接エラー原因を通知する
+        error_reason = final_audio_result if final_audio_result else "原因不明のエラー"
+        send_to_discord(WEBHOOK_AUDIO, f"⚠️ **【システム警告】音声の生成に失敗しました。**\n以下の原因により、テキストのみお送りします。\n```\n{error_reason}\n```")
         send_to_discord(WEBHOOK_AUDIO, audio_msg) 
 
-    print("✅ 全ての処理とDiscord送信が完了しました！")
+    print("✅ 全ての処理が完了しました！")
 
 if __name__ == "__main__":
     main()
