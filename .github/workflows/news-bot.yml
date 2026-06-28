@@ -2,9 +2,8 @@ name: AI News Radio Bot
 
 on:
   schedule:
-    # 日本時間の朝7時(UTC 22時) と 夕方18時(UTC 9時) に自動実行
     - cron: '0 22,9 * * *'
-  workflow_dispatch: # 手動で「今すぐ動かす」ためのボタン
+  workflow_dispatch:
 
 jobs:
   build:
@@ -26,14 +25,14 @@ jobs:
 
     - name: Start VOICEVOX Engine (Docker)
       run: |
-        # GitHubのサーバー内にVOICEVOXを一瞬で立ち上げる魔法のコマンド
         docker run -d -p 50021:50021 voicevox/voicevox_engine:cpu-ubuntu20.04-latest
         echo "VOICEVOXの起動を待機しています..."
-        sleep 15
+        # VOICEVOXが応答するまで最大60秒間、5秒おきに状態を確認する安全装置
+        timeout 60 bash -c 'until curl -s http://127.0.0.1:50021/version; do echo "まだ寝ています..."; sleep 5; done'
+        echo "VOICEVOX 起動完了！"
 
     - name: Run AI News Bot
       env:
-        # 金庫(Secrets)から鍵を取り出してPythonに渡す
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         WEBHOOK_TEXT: ${{ secrets.WEBHOOK_TEXT }}
         WEBHOOK_AUDIO: ${{ secrets.WEBHOOK_AUDIO }}
