@@ -68,11 +68,11 @@ def text_to_speech_voicevox(text, output_filename="radio.wav", speaker=20):
             query_res = requests.post(f"http://127.0.0.1:50021/audio_query", params={"text": line, "speaker": speaker})
             if query_res.status_code != 200: continue
             
-            # ⚙️ VOICEVOXの設計図を「SS動画の手毬風」に直接書き換える
+            # ⚙️ VOICEVOXの設計図を「提供されたSS動画の手毬風」に書き換える
             query_data = query_res.json()
-            query_data["speedScale"] = 0.8        # 速度: 0.8倍（変更なし：落ち着いたペース）
-            query_data["pitchScale"] = -0.08      # 音高: -0.08（さらに少し低くし、ダウナー感を演出）
-            query_data["intonationScale"] = 0.65  # 抑揚: 0.65（平坦にして「ぶっきらぼう」なトーンを強制）
+            query_data["speedScale"] = 0.92       # 速度: 0.92（遅すぎず、でも落ち着いた絶妙なテンポ）
+            query_data["pitchScale"] = -0.10      # 音高: -0.10（動画のダウナーで落ち着いた声質を完全再現）
+            query_data["intonationScale"] = 0.60  # 抑揚: 0.60（感情の起伏を限界まで削り、ぶっきらぼうさを強調）
             
             synth_res = requests.post(f"http://127.0.0.1:50021/synthesis", params={"speaker": speaker}, json=query_data)
             if synth_res.status_code == 200:
