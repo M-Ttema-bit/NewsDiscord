@@ -1,0 +1,40 @@
+name: AI News Radio Bot
+
+on:
+  schedule:
+    # 日本時間の朝7時(UTC 22時) と 夕方18時(UTC 9時) に自動実行
+    - cron: '0 22,9 * * *'
+  workflow_dispatch: # 手動で「今すぐ動かす」ためのボタン
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Start VOICEVOX Engine (Docker)
+      run: |
+        # GitHubのサーバー内にVOICEVOXを一瞬で立ち上げる魔法のコマンド
+        docker run -d -p 50021:50021 voicevox/voicevox_engine:cpu-ubuntu20.04-latest
+        echo "VOICEVOXの起動を待機しています..."
+        sleep 15
+
+    - name: Run AI News Bot
+      env:
+        # 金庫(Secrets)から鍵を取り出してPythonに渡す
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        WEBHOOK_TEXT: ${{ secrets.WEBHOOK_TEXT }}
+        WEBHOOK_AUDIO: ${{ secrets.WEBHOOK_AUDIO }}
+      run: python main.py
