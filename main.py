@@ -70,9 +70,9 @@ def text_to_speech_voicevox(text, output_filename="radio.wav", speaker=20):
             
             # ⚙️ VOICEVOXの設計図を「SS動画の手毬風」に直接書き換える
             query_data = query_res.json()
-            query_data["speedScale"] = 0.8       # 速度: 0.8倍（落ち着いたペース）
-            query_data["pitchScale"] = -0.05     # 音高: 少し低く（クール・重い愛情の演出）
-            query_data["intonationScale"] = 0.8  # 抑揚: 少し平坦に（SS特有の淡々とした語り口）
+            query_data["speedScale"] = 0.8        # 速度: 0.8倍（変更なし：落ち着いたペース）
+            query_data["pitchScale"] = -0.08      # 音高: -0.08（さらに少し低くし、ダウナー感を演出）
+            query_data["intonationScale"] = 0.65  # 抑揚: 0.65（平坦にして「ぶっきらぼう」なトーンを強制）
             
             synth_res = requests.post(f"http://127.0.0.1:50021/synthesis", params={"speaker": speaker}, json=query_data)
             if synth_res.status_code == 200:
@@ -139,13 +139,15 @@ def main():
 
     prompt = f"""
     以下の5つのニュース記事を一括で処理してください。出力は必ず以下の形式の純粋なJSON配列のみとし、Markdown記法(```json など)は一切含めないでください。
+
     [
         {{
             "id": 0,
-            "summary": "事象の事実ベースの要約（約200字）",
-            "analysis": "なぜ重要か、今後の推論・考察（約300字）"
+            "summary": "【要約】事象の要約（約200字）。※重要ルール：事実ベースの出来事は文末を「～そうです。」とし、記者や関係者の推論・意見が含まれる部分は文末を「～そうですね。」としてください。",
+            "analysis": "【考察】なぜ重要か、今後の推論（約300字）。※重要ルール：断定表現（～だ。～である。～です。）は一切禁止し、少しぶっきらぼうな口調で「～そうですね。」「～じゃないですかね。」「～みたいですね。」などの推論の言い回しで結んでください。"
         }}
     ]
+
     【ニュース記事】
     {articles_for_prompt}
     """
