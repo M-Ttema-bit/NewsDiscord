@@ -49,21 +49,29 @@ def call_gemini_with_fallback(prompt):
     return None
 
 def text_to_speech_voicevox(text, output_filename="radio.wav", speaker=2):
-    """不良品WAVの検閲機能と、詳細なエラー報告機能を搭載"""
-    print("🎙️ 音声を生成中...")
+    """不良品WAVの検閲機能と、詳細なエラー報告機能、読み・速度調整を搭載"""
+    print("🎙️ 音声を生成中...（読み方・速度調整版）")
     
     clean_text = text.replace("*", "").replace("#", "").replace('"', '').replace("'", "")
+    
+    # 📝 読み間違いの強制修正（VOICEVOXに渡す前にカタカナに変換）
+    clean_text = clean_text.replace("月村手毬", "ツキムラテマリ")
+    clean_text = clean_text.replace("初星学園", "ハツボシガクエン")
+    
     clean_text = clean_text.replace("。", "。\n").replace("！", "！\n").replace("？", "？\n")
     lines = [line.strip() for line in clean_text.split('\n') if line.strip()]
     wav_files = []
     
     try:
-        # 1. 一文ずつ生成
         for i, line in enumerate(lines):
             query_res = requests.post(f"http://127.0.0.1:50021/audio_query", params={"text": line, "speaker": speaker})
             if query_res.status_code != 200: continue
             
-            synth_res = requests.post(f"http://127.0.0.1:50021/synthesis", params={"speaker": speaker}, json=query_res.json())
+            # ⚙️ VOICEVOXの設計図（パラメータ）を直接書き換える
+            query_data = query_res.json()
+            query_data["speedScale"] = 0.8  # 読み上げ速度を0.8倍に変更
+            
+            synth_res = requests.post(f"http://127.0.0.1:50021/synthesis", params={"speaker": speaker}, json=query_data)
             if synth_res.status_code == 200:
                 tmp_name = f"tmp_{i}.wav"
                 with open(tmp_name, "wb") as f:
@@ -73,7 +81,6 @@ def text_to_speech_voicevox(text, output_filename="radio.wav", speaker=2):
         if not wav_files:
             return "ERROR: VOICEVOXから有効な音声が1つも返ってきませんでした。"
 
-        # 2. 【自動検閲】壊れたWAVファイルを結合前に除外する
         valid_wavs = []
         for wf in wav_files:
             try:
@@ -86,7 +93,6 @@ def text_to_speech_voicevox(text, output_filename="radio.wav", speaker=2):
         if not valid_wavs:
             return "ERROR: 生成されたWAVファイルが全て破損していました。"
 
-        # 3. 正常なWAVだけを結合
         with wave.open(valid_wavs[0], 'rb') as w_in:
             params = w_in.getparams()
             with wave.open(output_filename, 'wb') as w_out:
@@ -95,7 +101,6 @@ def text_to_speech_voicevox(text, output_filename="radio.wav", speaker=2):
                     with wave.open(wf, 'rb') as w:
                         w_out.writeframes(w.readframes(w.getnframes()))
         
-        # 4. MP3に圧縮
         mp3_filename = "radio.mp3"
         print("🗜️ WAVからMP3へ圧縮中...")
         subprocess.run(["ffmpeg", "-i", output_filename, "-b:a", "128k", mp3_filename, "-y"], check=True)
