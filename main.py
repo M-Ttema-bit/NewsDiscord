@@ -5,15 +5,15 @@ from bs4 import BeautifulSoup
 import google.generativeai as genai
 import time
 import json
+import wave
 
 # ==========================================
-# ⚙️ 設定エリア（GitHub Secretsという金庫から読み込む安全な設計）
+# ⚙️ 設定エリア
 # ==========================================
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 WEBHOOK_TEXT = os.environ.get("WEBHOOK_TEXT")
 WEBHOOK_AUDIO = os.environ.get("WEBHOOK_AUDIO")
 
-# クラウド上で鍵が見つからない場合のストッパー
 if not GEMINI_API_KEY or not WEBHOOK_TEXT:
     print("❌ エラー: APIキーやWebhook URLが設定されていません。")
     exit(1)
@@ -47,24 +47,54 @@ def call_gemini_with_fallback(prompt):
     return None
 
 def text_to_speech_voicevox(text, output_filename="radio.wav", speaker=2):
-    """VOICEVOXエンジンにテキストを送って音声(wav)を生成する（speaker=2: 四国めたん ノーマル）"""
-    print("🎙️ 四国めたんが音声を生成中...（少し時間がかかります）")
+    """【改修版】安定化のため、句読点（。！？）で確実に一文ずつ分割して処理する"""
+    print("🎙️ 音声を生成中...（安定化のため一文ずつ分割処理します）")
+    
+    # 読み上げ時に邪魔になるMarkdownの記号を掃除
+    clean_text = text.replace("*", "").replace("#", "")
+    
+    # 句点や感嘆符の後に「改行」を強制挿入して、長文ブロックを確実に破壊する
+    clean_text = clean_text.replace("。", "。\n").replace("！", "！\n").replace("？", "？\n")
+    
+    # 改行でリスト化（空白行は除去）
+    lines = [line.strip() for line in clean_text.split('\n') if line.strip()]
+    wav_files = []
+    
     try:
-        query_res = requests.post(f"http://127.0.0.1:50021/audio_query", params={"text": text, "speaker": speaker})
-        synth_res = requests.post(f"http://127.0.0.1:50021/synthesis", params={"speaker": speaker}, json=query_res.json())
-        with open(output_filename, "wb") as f:
-            f.write(synth_res.content)
+        for i, line in enumerate(lines):
+            # 一文ずつVOICEVOXへ投げる
+            query_res = requests.post(f"http://127.0.0.1:50021/audio_query", params={"text": line, "speaker": speaker})
+            if query_res.status_code != 200:
+                continue
+            
+            synth_res = requests.post(f"http://127.0.0.1:50021/synthesis", params={"speaker": speaker}, json=query_res.json())
+            if synth_res.status_code == 200:
+                tmp_name = f"tmp_{i}.wav"
+                with open(tmp_name, "wb") as f:
+                    f.write(synth_res.content)
+                wav_files.append(tmp_name)
+        
+        if not wav_files:
+            print("❌ 音声ファイルの生成に失敗しました。")
+            return False
+
+        # 分割して作った数十個のWAVファイルを、順番に1つのファイルにガッチャンコする
+        with wave.open(wav_files[0], 'rb') as w_in:
+            params = w_in.getparams()
+            with wave.open(output_filename, 'wb') as w_out:
+                w_out.setparams(params)
+                for wf in wav_files:
+                    with wave.open(wf, 'rb') as w:
+                        w_out.writeframes(w.readframes(w.getnframes()))
         return True
     except Exception as e:
         print(f"⚠️ VOICEVOX通信エラー: {e}")
         return False
 
 def send_audio_to_discord(webhook_url, text_msg, filename="radio.wav"):
-    """Discordに音声ファイルをアップロードする"""
     print("📤 Discordへ音声ファイルを送信中...")
     with open(filename, "rb") as f:
         res = requests.post(webhook_url, data={"content": text_msg}, files={"file": (filename, f, "audio/wav")})
-        # 送信に失敗した場合、エラー内容を表示する
         if res.status_code >= 400:
             print(f"❌ Discord送信エラー ({res.status_code}): {res.text}")
         time.sleep(1)
@@ -76,7 +106,6 @@ def main():
     articles_for_prompt = ""
     original_links = []
     
-    print("🌐 スクラッピング中 (Bulk Processingの準備)...")
     for i, entry in enumerate(feed.entries[:5]):
         text = scrape_text(entry.link)
         articles_for_prompt += f"【ID: {i}】\nTitle: {entry.title}\nContent: {text}\n---\n"
@@ -121,7 +150,9 @@ def main():
 
     # ② 音声メッセージ作成と送信
     print("🎙️ ラジオ台本構築中...")
-    audio_msg = "📻 **【読み上げ原稿】ニュースラジオ**\n\nおはようございます。本日の主要ニュースをお伝えします。ラインナップはこちらの5本です。\n\n"
+    
+    # 🎤 ここから手毬の原稿 🎤
+    audio_msg = "📻 **【読み上げ原稿】ニュースラジオ**\n\nおはようございます。初星学園の、月村手毬です。本日の主要ニュースをお伝えします。ラインナップはこちらの5本です。\n\n"
     for i, link_data in enumerate(original_links):
         audio_msg += f"ニュースその{i+1}。{link_data['title']}。\n"
     
@@ -131,16 +162,16 @@ def main():
         title = original_links[idx]['title']
         audio_msg += f"まずは、「{title}」のニュースです。\n{data['summary']}\n\nこの件に関してですが、\n{data['analysis']}\n\n"
         
-    audio_msg += "本日のニュースは以上となります。それでは、いってらっしゃいませ。"
+    audio_msg += "本日のニュースは以上となります。少しでもあなたの力になれたなら、光栄です。月村手毬がお送りしました。それでは、いってらっしゃいませ。"
 
-    # --- 四国めたんの音声化 ---
+    # --- 音声化（一文分割＆結合処理） ---
     is_voice_success = text_to_speech_voicevox(audio_msg, speaker=2)
 
     if is_voice_success:
-        send_audio_to_discord(WEBHOOK_AUDIO, "📻 **本日のニュースラジオ月村手毬です！**", "radio.wav")
-        send_to_discord(WEBHOOK_AUDIO, audio_msg) # 原稿も送る
+        send_audio_to_discord(WEBHOOK_AUDIO, "📻 **本日のニュースラジオ、月村手毬です！**", "radio.wav")
+        send_to_discord(WEBHOOK_AUDIO, audio_msg) 
     else:
-        send_to_discord(WEBHOOK_AUDIO, audio_msg) # 失敗時は原稿だけ
+        send_to_discord(WEBHOOK_AUDIO, audio_msg) 
 
     print("✅ 全ての処理とDiscord送信が完了しました！")
 
