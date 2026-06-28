@@ -63,7 +63,10 @@ def send_audio_to_discord(webhook_url, text_msg, filename="radio.wav"):
     """Discordに音声ファイルをアップロードする"""
     print("📤 Discordへ音声ファイルを送信中...")
     with open(filename, "rb") as f:
-        requests.post(webhook_url, data={"content": text_msg}, files={"file": (filename, f, "audio/wav")})
+        res = requests.post(webhook_url, data={"content": text_msg}, files={"file": (filename, f, "audio/wav")})
+        # 送信に失敗した場合、エラー内容を表示する
+        if res.status_code >= 400:
+            print(f"❌ Discord送信エラー ({res.status_code}): {res.text}")
         time.sleep(1)
 
 def main():
