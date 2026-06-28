@@ -20,6 +20,8 @@ jobs:
 
     - name: Install dependencies
       run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
@@ -27,7 +29,6 @@ jobs:
       run: |
         docker run -d -p 50021:50021 voicevox/voicevox_engine:cpu-ubuntu20.04-latest
         echo "VOICEVOXの起動を待機しています..."
-        # VOICEVOXが応答するまで最大60秒間、5秒おきに状態を確認する安全装置
         timeout 60 bash -c 'until curl -s http://127.0.0.1:50021/version; do echo "まだ寝ています..."; sleep 5; done'
         echo "VOICEVOX 起動完了！"
 
