@@ -175,20 +175,20 @@ def main():
     # ② 音声メッセージ作成と送信
     print("🎙️ ラジオ台本構築中...")
     
-    audio_msg = "📻 **【読み上げ原稿】ニュースラジオ**\n\nおはようございます。初星学園の、月村手毬です。本日の主要ニュースをお伝えします。ラインナップはこちらの5本です。\n\n"
+    audio_msg = "📻 **ニュース**\n\nおはようございます。……プロデューサー、ちゃんと起きましたか？月村手毬です。本日の主要ニュースをお伝えします。ラインナップはこちらの5本です。\n\n"
     for i, link_data in enumerate(original_links):
         audio_msg += f"ニュースその{i+1}。{link_data['title']}。\n"
     
-    audio_msg += "\nそれでは、一つ一つのニュースについて詳しく見て、考えていきましょう。\n\n"
+    audio_msg += "\n多いですね……プロデューサー……。それでは、一つ一つのニュースについて詳しく見て、考えていきましょう。\n\n"
     for data in analyzed_data:
         idx = data['id']
         title = original_links[idx]['title']
         audio_msg += f"まずは、「{title}」のニュースです。\n{data['summary']}\n\nこの件に関してですが、\n{data['analysis']}\n\n"
         
-    audio_msg += "本日のニュースは以上となります。少しでもあなたの力になれたなら、光栄です。月村手毬がお送りしました。それでは、いってらっしゃいませ。"
+    audio_msg += "本日のニュースは以上です。……今日も一日、よそ見しないで、私だけを見ていればいいんです。私はレッスンに行ってきます。"
 
     # --- 音声化処理 ---
-    final_audio_result = text_to_speech_voicevox(audio_msg, speaker=2)
+    final_audio_result = text_to_speech_voicevox(audio_msg, speaker=20)
 
     # 挙動変化：成功時とエラー時でDiscordへの送信内容を明確に分ける
     if final_audio_result and not final_audio_result.startswith("ERROR:"):
