@@ -6,6 +6,7 @@ import google.generativeai as genai
 import time
 import json
 import wave
+import subprocess # 👈 NEW: MP3圧縮ツールを呼び出すための部品を追加
 
 # ==========================================
 # ⚙️ 設定エリア
@@ -47,22 +48,16 @@ def call_gemini_with_fallback(prompt):
     return None
 
 def text_to_speech_voicevox(text, output_filename="radio.wav", speaker=2):
-    """【改修版】安定化のため、句読点（。！？）で確実に一文ずつ分割して処理する"""
+    """安定化のため一文ずつ分割し、最後にMP3に圧縮して容量制限を突破する"""
     print("🎙️ 音声を生成中...（安定化のため一文ずつ分割処理します）")
     
-    # 読み上げ時に邪魔になるMarkdownの記号を掃除
     clean_text = text.replace("*", "").replace("#", "")
-    
-    # 句点や感嘆符の後に「改行」を強制挿入して、長文ブロックを確実に破壊する
     clean_text = clean_text.replace("。", "。\n").replace("！", "！\n").replace("？", "？\n")
-    
-    # 改行でリスト化（空白行は除去）
     lines = [line.strip() for line in clean_text.split('\n') if line.strip()]
     wav_files = []
     
     try:
         for i, line in enumerate(lines):
-            # 一文ずつVOICEVOXへ投げる
             query_res = requests.post(f"http://127.0.0.1:50021/audio_query", params={"text": line, "speaker": speaker})
             if query_res.status_code != 200:
                 continue
@@ -76,9 +71,9 @@ def text_to_speech_voicevox(text, output_filename="radio.wav", speaker=2):
         
         if not wav_files:
             print("❌ 音声ファイルの生成に失敗しました。")
-            return False
+            return None
 
-        # 分割して作った数十個のWAVファイルを、順番に1つのファイルにガッチャンコする
+        # 1. 数十個のWAVを1つの巨大なWAVに結合
         with wave.open(wav_files[0], 'rb') as w_in:
             params = w_in.getparams()
             with wave.open(output_filename, 'wb') as w_out:
@@ -86,15 +81,24 @@ def text_to_speech_voicevox(text, output_filename="radio.wav", speaker=2):
                 for wf in wav_files:
                     with wave.open(wf, 'rb') as w:
                         w_out.writeframes(w.readframes(w.getnframes()))
-        return True
-    except Exception as e:
-        print(f"⚠️ VOICEVOX通信エラー: {e}")
-        return False
+        
+        # 2. 巨大なWAVを軽量なMP3に圧縮（Discordの制限回避）
+        mp3_filename = "radio.mp3"
+        print("🗜️ WAVからMP3へ圧縮中...（Discordアップロード用）")
+        subprocess.run(["ffmpeg", "-i", output_filename, "-b:a", "128k", mp3_filename, "-y"], check=True)
+        
+        return mp3_filename # 成功時はMP3のファイル名を返す
 
-def send_audio_to_discord(webhook_url, text_msg, filename="radio.wav"):
-    print("📤 Discordへ音声ファイルを送信中...")
+    except Exception as e:
+        print(f"⚠️ 音声生成/変換エラー: {e}")
+        return None
+
+def send_audio_to_discord(webhook_url, text_msg, filename):
+    print(f"📤 Discordへ音声ファイル（{filename}）を送信中...")
+    mime_type = "audio/mpeg" if filename.endswith(".mp3") else "audio/wav"
+    
     with open(filename, "rb") as f:
-        res = requests.post(webhook_url, data={"content": text_msg}, files={"file": (filename, f, "audio/wav")})
+        res = requests.post(webhook_url, data={"content": text_msg}, files={"file": (filename, f, mime_type)})
         if res.status_code >= 400:
             print(f"❌ Discord送信エラー ({res.status_code}): {res.text}")
         time.sleep(1)
@@ -164,11 +168,11 @@ def main():
         
     audio_msg += "本日のニュースは以上となります。少しでもあなたの力になれたなら、光栄です。月村手毬がお送りしました。それでは、いってらっしゃいませ。"
 
-    # --- 音声化（一文分割＆結合処理） ---
-    is_voice_success = text_to_speech_voicevox(audio_msg, speaker=2)
+    # --- 音声化（一文分割＆MP3圧縮処理） ---
+    final_audio_file = text_to_speech_voicevox(audio_msg, speaker=2)
 
-    if is_voice_success:
-        send_audio_to_discord(WEBHOOK_AUDIO, "📻 **本日のニュースラジオ、月村手毬です！**", "radio.wav")
+    if final_audio_file:
+        send_audio_to_discord(WEBHOOK_AUDIO, "📻 **本日のニュースラジオ、月村手毬です！**", final_audio_file)
         send_to_discord(WEBHOOK_AUDIO, audio_msg) 
     else:
         send_to_discord(WEBHOOK_AUDIO, audio_msg) 
