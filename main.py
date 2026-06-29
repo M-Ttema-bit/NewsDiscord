@@ -68,11 +68,11 @@ def text_to_speech_voicevox(text, output_filename="radio.wav", speaker=20):
             query_res = requests.post(f"http://127.0.0.1:50021/audio_query", params={"text": line, "speaker": speaker})
             if query_res.status_code != 200: continue
             
-            # ⚙️ VOICEVOXの設計図を「公式の月村手毬」に極限まで同期させる
+            # ⚙️ VOICEVOXの設計図を「公式の月村手毬」に完全同期させる
             query_data = query_res.json()
-            query_data["speedScale"] = 1.04       # 速度: 1.04（ハキハキとした鋭い滑舌）
-            query_data["pitchScale"] = -0.04      # 音高: -0.04（クールで芯のある中低音）
-            query_data["intonationScale"] = 1.15  # 抑揚: 1.15（公式特有の豊かな感情表現と圧を再現）
+            query_data["speedScale"] = 0.95       # 速度: 0.95（真面目に、一生懸命ニュースを読んでいるテンポ）
+            query_data["pitchScale"] = 0.03       # 音高: 0.03（WhiteCULの低音を少し上げ、手毬の年齢感に合わせる）
+            query_data["intonationScale"] = 1.15  # 抑揚: 1.15（平坦さを捨て、ボーカリスト特有の豊かな感情表現を持たせる）
             
             synth_res = requests.post(f"http://127.0.0.1:50021/synthesis", params={"speaker": speaker}, json=query_data)
             if synth_res.status_code == 200:
@@ -190,7 +190,7 @@ def main():
     audio_msg += "本日のニュースは以上です。……今日も一日、よそ見しないで、私だけを見ていればいいんです。私はレッスンに行ってきます。"
 
     # --- 音声化処理 ---
-    final_audio_result = text_to_speech_voicevox(audio_msg, speaker=9)
+    final_audio_result = text_to_speech_voicevox(audio_msg, speaker=23)
 
     # 挙動変化：成功時とエラー時でDiscordへの送信内容を明確に分ける
     if final_audio_result and not final_audio_result.startswith("ERROR:"):
