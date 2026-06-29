@@ -68,11 +68,11 @@ def text_to_speech_voicevox(text, output_filename="radio.wav", speaker=20):
             query_res = requests.post(f"http://127.0.0.1:50021/audio_query", params={"text": line, "speaker": speaker})
             if query_res.status_code != 200: continue
             
-            # ⚙️ VOICEVOXの設計図を「提供動画の完全再現」に書き換える
+            # ⚙️ VOICEVOXの設計図を「提供された動画の音声」に完全同期させる
             query_data = query_res.json()
-            query_data["speedScale"] = 0.87       # 速度: 0.87（気怠さと落ち着きの完全再現テンポ）
-            query_data["pitchScale"] = -0.12      # 音高: -0.12（喉の奥で響くダウナーな低音域）
-            query_data["intonationScale"] = 0.62  # 抑揚: 0.62（機械にならないギリギリの平坦さ）
+            query_data["speedScale"] = 0.78       # 速度: 0.78（動画特有の「ぽつりぽつり」とした余裕のあるテンポ）
+            query_data["pitchScale"] = -0.02      # 音高: -0.02（声質を濁さず、ごく僅かに明るさだけを抑える）
+            query_data["intonationScale"] = 0.45  # 抑揚: 0.45（ロボットにならないギリギリのラインまで感情を削る）
             
             synth_res = requests.post(f"http://127.0.0.1:50021/synthesis", params={"speaker": speaker}, json=query_data)
             if synth_res.status_code == 200:
